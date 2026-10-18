@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arduino Bluetooth Controller</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: manipulation;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between max-w-md mx-auto relative shadow-2xl overflow-x-hidden border-x border-slate-800">
+
+    <!-- Header -->
+    <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700 p-4 sticky top-0 z-50 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div id="status-icon-bg" class="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center transition-all duration-300">
+                <i id="status-icon" class="fa-solid fa-bluetooth-b text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight">Arduino Control</h1>
+                <p id="status-text" class="text-xs text-red-400 font-medium">Terputus</p>
+            </div>
+        </div>
+        <button id="btn-connect" class="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-lg shadow-blue-500/20 active:scale-95 transition flex items-center gap-2">
+            <i class="fa-solid fa-plug"></i>
+            <span id="btn-connect-text">Hubungkan</span>
+        </button>
+    </header>
+
+    <!-- Main Content Tab View -->
+    <main class="p-4 flex-1 overflow-y-auto space-y-5 custom-scrollbar mb-16">
+
+        <!-- Bluetooth Warning Banner for Unsupported Browsers -->
+        <div id="ble-warning" class="hidden bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3.5 text-xs text-amber-300 flex items-start gap-3">
+            <i class="fa-solid fa-triangle-exclamation text-amber-400 text-base mt-0.5"></i>
+            <div>
+                <span class="font-bold block">Pemberitahuan Web Bluetooth:</span>
+                Gunakan Chrome di Android dan pastikan lokasi/GPS & Bluetooth HP aktif agar dapat memindai modul HC-05/06 / BLE.
+            </div>
+        </div>
+
+        <!-- Tab 1: Control Panel -->
+        <div id="tab-controls" class="space-y-5">
+
+            <!-- Voice Control Banner / Card -->
+            <section class="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/30 rounded-2xl p-4 space-y-3 relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-indigo-300 flex items-center gap-2">
+                        <i class="fa-solid fa-microphone text-indigo-400"></i> Kontrol Suara (Voice)
+                    </h2>
+                    <span id="speech-status-badge" class="text-[10px] font-mono bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">Siap</span>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button id="btn-mic" onclick="toggleVoiceRecognition()" class="w-14 h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 transition-all duration-300 relative group">
+                        <i id="mic-icon" class="fa-solid fa-microphone text-xl"></i>
+                        <span id="mic-pulse" class="hidden absolute inset-0 rounded-2xl bg-indigo-500 animate-ping opacity-30"></span>
+                    </button>
+                    
+                    <div class="flex-1 bg-slate-900/70 border border-slate-800 rounded-xl p-2.5 min-h-[50px] flex flex-col justify-center">
+                        <p class="text-[10px] text-slate-400 uppercase font-semibold">Teks Terdeteksi:</p>
+                        <p id="speech-transcript" class="text-sm font-medium text-amber-300 italic">"Tekan tombol mic & katakan perintah..."</p>
+                    </div>
+                </div>
+
+                <div class="text-[11px] text-slate-400 bg-slate-900/40 p-2 rounded-lg border border-slate-800/60">
+                    <span class="font-medium text-slate-300">Contoh perintah suara:</span>
+                    <ul class="list-disc list-inside mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
+                        <li>"Nyalakan Lampu Satu"</li>
+                        <li>"Matikan Lampu Satu"</li>
+                        <li>"Nyalakan Semua"</li>
+                        <li>"Matikan Semua"</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Switch Controls Grid -->
+            <section class="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-4 space-y-3">
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <i class="fa-solid fa-toggle-on text-blue-400"></i> Switch Digital (Pin Relai/LED)
+                </h2>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Switch 1 -->
+                    <div class="bg-slate-800 border border-slate-700 p-3.5 rounded-xl flex items-center justify-between">
+                        <div>
+                            <p class="font-medium text-sm">Lampu 1</p>
+                            <span class="text-[10px] text-slate-400">Cmd: 'A' / 'a'</span>
+                        </div>
+                        <button onclick="toggleSwitch('sw1', 'A', 'a')" id="sw1" class="w-12 h-7 bg-slate-700 rounded-full p-1 transition-colors duration-200 ease-in-out relative">
+                            <div class="dot w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out"></div>
+                        </button>
+                    </div>
+
+                    <!-- Switch 2 -->
+                    <div class="bg-slate-800 border border-slate-700 p-3.5 rounded-xl flex items-center justify-between">
+                        <div>
+                            <p class="font-medium text-sm">Lampu 2</p>
+                            <span class="text-[10px] text-slate-400">Cmd: 'B' / 'b'</span>
+                        </div>
+                        <button onclick="toggleSwitch('sw2', 'B', 'b')" id="sw2" class="w-12 h-7 bg-slate-700 rounded-full p-1 transition-colors duration-200 ease-in-out relative">
+                            <div class="dot w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out"></div>
+                        </button>
+                    </div>
+
+                    <!-- Switch 3 -->
+                    <div class="bg-slate-800 border border-slate-700 p-3.5 rounded-xl flex items-center justify-between">
+                        <div>
+                            <p class="font-medium text-sm">Kipas / Relay</p>
+                            <span class="text-[10px] text-slate-400">Cmd: 'C' / 'c'</span>
+                        </div>
+                        <button onclick="toggleSwitch('sw3', 'C', 'c')" id="sw3" class="w-12 h-7 bg-slate-700 rounded-full p-1 transition-colors duration-200 ease-in-out relative">
+                            <div class="dot w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out"></div>
+                        </button>
+                    </div>
+
+                    <!-- Switch 4 -->
+                    <div class="bg-slate-800 border border-slate-700 p-3.5 rounded-xl flex items-center justify-between">
+                        <div>
+                            <p class="font-medium text-sm">Stopkontak</p>
+                            <span class="text-[10px] text-slate-400">Cmd: 'D' / 'd'</span>
+                        </div>
+                        <button onclick="toggleSwitch('sw4', 'D', 'd')" id="sw4" class="w-12 h-7 bg-slate-700 rounded-full p-1 transition-colors duration-200 ease-in-out relative">
+                            <div class="dot w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out"></div>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Slider / PWM Control -->
+            <section class="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-4 space-y-3">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-indigo-400"></i> Dimmer PWM / Speed (0-255)
+                    </h2>
+                    <span id="slider-val" class="text-xs font-mono bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">128</span>
+                </div>
+                <input id="pwm-slider" type="range" min="0" max="255" value="128" oninput="handleSliderChange(this.value)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                <p class="text-[11px] text-slate-400">Format data terkirim: <code class="text-indigo-300">S:128\n</code></p>
+            </section>
+
+            <!-- Custom Action Push Buttons -->
+            <section class="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-4 space-y-3">
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <i class="fa-solid fa-gamepad text-emerald-400"></i> Tombol Aksi Cepat
+                </h2>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="sendData('1')" class="bg-slate-800 hover:bg-slate-700 active:bg-emerald-600 border border-slate-700 text-slate-200 p-3 rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition">
+                        <i class="fa-solid fa-power-off text-emerald-400 text-lg"></i>
+                        <span class="text-xs font-medium">Power On ('1')</span>
+                    </button>
+                    <button onclick="sendData('0')" class="bg-slate-800 hover:bg-slate-700 active:bg-rose-600 border border-slate-700 text-slate-200 p-3 rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition">
+                        <i class="fa-solid fa-circle-xmark text-rose-400 text-lg"></i>
+                        <span class="text-xs font-medium">Power Off ('0')</span>
+                    </button>
+                    <button onclick="sendData('RESET')" class="bg-slate-800 hover:bg-slate-700 active:bg-amber-600 border border-slate-700 text-slate-200 p-3 rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition">
+                        <i class="fa-solid fa-rotate text-amber-400 text-lg"></i>
+                        <span class="text-xs font-medium">Reset ('RESET')</span>
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Tab 2: Terminal / Monitor -->
+        <div id="tab-terminal" class="hidden space-y-3">
+            <div class="flex items-center justify-between">
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <i class="fa-solid fa-terminal text-emerald-400"></i> Monitor Serial Bluetooth
+                </h2>
+                <button onclick="clearTerminal()" class="text-xs text-slate-400 hover:text-slate-200 bg-slate-800 border border-slate-700 px-2 py-1 rounded">
+                    <i class="fa-solid fa-trash mr-1"></i> Bersihkan
+                </button>
+            </div>
+
+            <!-- Console Output Area -->
+            <div id="terminal-log" class="bg-slate-950 font-mono text-xs text-emerald-400 p-3 rounded-2xl h-64 overflow-y-auto border border-slate-800 space-y-1 custom-scrollbar">
+                <div class="text-slate-500 italic">[Sistem Log SIAP] Selamat datang di Arduino Controller...</div>
+            </div>
+
+            <!-- Send Manual Command Input -->
+            <form onsubmit="handleManualSend(event)" class="flex gap-2">
+                <input id="manual-cmd" type="text" placeholder="Ketik perintah (contoh: HELLO)..." class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-medium transition">
+                    Kirim
+                </button>
+            </form>
+        </div>
+
+        <!-- Tab 3: Code Guide -->
+        <div id="tab-code" class="hidden space-y-3">
+            <div class="flex items-center justify-between">
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <i class="fa-solid fa-code text-amber-400"></i> Kode Arduino C++ (.ino)
+                </h2>
+                <button onclick="copyArduinoCode()" class="text-xs text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center gap-1 transition">
+                    <i class="fa-regular fa-copy"></i> Copy
+                </button>
+            </div>
+            
+            <p class="text-xs text-slate-400">
+                Unggah kode di bawah ke Arduino Anda. Kode ini mendukung perintah dari tombol digital, dimmer PWM, dan perintah suara.
+            </p>
+
+            <pre class="bg-slate-950 text-slate-300 p-3 rounded-2xl text-[11px] font-mono overflow-x-auto border border-slate-800 max-h-72 custom-scrollbar"><code id="code-block">#include &lt;SoftwareSerial.h&gt;
+
+SoftwareSerial BT(2, 3); // RX = 2, TX = 3 (Pin Modul Bluetooth)
+
+const int RELAY_1 = 8;
+const int RELAY_2 = 9;
+const int RELAY_3 = 10;
+const int RELAY_4 = 11;
+const int PWM_PIN = 6; // Pin LED/Motor Dimmer
+
+void setup() {
+  Serial.begin(9600);
+  BT.begin(9600); // Baudrate HC-05 / HC-06
+  
+  pinMode(RELAY_1, OUTPUT);
+  pinMode(RELAY_2, OUTPUT);
+  pinMode(RELAY_3, OUTPUT);
+  pinMode(RELAY_4, OUTPUT);
+  pinMode(PWM_PIN, OUTPUT);
+
+  // Default High (Matikan relay jika relay Low Active)
+  digitalWrite(RELAY_1, HIGH);
+  digitalWrite(RELAY_2, HIGH);
+  digitalWrite(RELAY_3, HIGH);
+  digitalWrite(RELAY_4, HIGH);
+}
+
+void loop() {
+  if (BT.available()) {
+    String data = BT.readStringUntil('\n');
+    data.trim(); // Hapus whitespace / newline
+    
+    Serial.println("Diterima: " + data);
+
+    // Perintah Utama (Tombol & Suara)
+    if (data == "A") digitalWrite(RELAY_1, LOW);  // Lampu 1 ON
+    if (data == "a") digitalWrite(RELAY_1, HIGH); // Lampu 1 OFF
+    if (data == "B") digitalWrite(RELAY_2, LOW);  // Lampu 2 ON
+    if (data == "b") digitalWrite(RELAY_2, HIGH); // Lampu 2 OFF
+    if (data == "C") digitalWrite(RELAY_3, LOW);  // Kipas/Relay 3 ON
+    if (data == "c") digitalWrite(RELAY_3, HIGH); // Kipas/Relay 3 OFF
+    if (data == "D") digitalWrite(RELAY_4, LOW);  // Stopkontak ON
+    if (data == "d") digitalWrite(RELAY_4, HIGH); // Stopkontak OFF
+
+    // Perintah Suara Semua / Power
+    if (data == "ALL_ON" || data == "1") {
+      digitalWrite(RELAY_1, LOW);
+      digitalWrite(RELAY_2, LOW);
+      digitalWrite(RELAY_3, LOW);
+      digitalWrite(RELAY_4, LOW);
+    }
+
+    if (data == "ALL_OFF" || data == "0") {
+      digitalWrite(RELAY_1, HIGH);
+      digitalWrite(RELAY_2, HIGH);
+      digitalWrite(RELAY_3, HIGH);
+      digitalWrite(RELAY_4, HIGH);
+    }
+
+    // Handle Slider Dimmer (Format: "S:128")
+    if (data.startsWith("S:")) {
+      int pwmVal = data.substring(2).toInt();
+      analogWrite(PWM_PIN, pwmVal);
+    }
+  }
+}</code></pre>
+        </div>
+
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bg-slate-800/90 backdrop-blur border-t border-slate-700/80 fixed bottom-0 left-0 right-0 max-w-md mx-auto z-50 flex justify-around p-2">
+        <button onclick="switchTab('controls')" id="nav-controls" class="flex flex-col items-center gap-1 p-2 text-blue-400 w-1/3 transition">
+            <i class="fa-solid fa-gamepad text-lg"></i>
+            <span class="text-[10px] font-medium">Kontrol</span>
+        </button>
+        <button onclick="switchTab('terminal')" id="nav-terminal" class="flex flex-col items-center gap-1 p-2 text-slate-400 hover:text-slate-200 w-1/3 transition">
+            <i class="fa-solid fa-terminal text-lg"></i>
+            <span class="text-[10px] font-medium">Monitor Serial</span>
+        </button>
+        <button onclick="switchTab('code')" id="nav-code" class="flex flex-col items-center gap-1 p-2 text-slate-400 hover:text-slate-200 w-1/3 transition">
+            <i class="fa-solid fa-code text-lg"></i>
+            <span class="text-[10px] font-medium">Kode Arduino</span>
+        </button>
+    </nav>
+
+    <script>
+        // State variables
+        let bluetoothDevice = null;
+        let gattServer = null;
+        let txCharacteristic = null;
+        let isConnected = false;
+        let switchStates = { sw1: false, sw2: false, sw3: false, sw4: false };
+
+        // Voice Recognition Variables
+        let recognition = null;
+        let isListening = false;
+
+        // DOM Elements
+        const btnConnect = document.getElementById('btn-connect');
+        const btnConnectText = document.getElementById('btn-connect-text');
+        const statusText = document.getElementById('status-text');
+        const statusIconBg = document.getElementById('status-icon-bg');
+        const terminalLog = document.getElementById('terminal-log');
+        const speechTranscript = document.getElementById('speech-transcript');
+        const speechStatusBadge = document.getElementById('speech-status-badge');
+        const btnMic = document.getElementById('btn-mic');
+        const micIcon = document.getElementById('mic-icon');
+        const micPulse = document.getElementById('mic-pulse');
+
+        // Check APIs Support
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!navigator.bluetooth) {
+                document.getElementById('ble-warning').classList.remove('hidden');
+            }
+            initSpeechRecognition();
+        });
+
+        // Initialize Speech Recognition (Web Speech API)
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            
+            if (!SpeechRecognition) {
+                speechTranscript.innerText = "Browser tidak mendukung Speech Recognition. Gunakan Chrome di Android.";
+                speechTranscript.classList.add('text-rose-400');
+                btnMic.disabled = true;
+                btnMic.classList.add('opacity-50', 'cursor-not-allowed');
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'id-ID'; // Bahasa Indonesia
+            recognition.interimResults = false;
+
+            recognition.onstart = () => {
+                isListening = true;
+                speechStatusBadge.innerText = 'Mendengarkan...';
+                speechStatusBadge.className = 'text-[10px] font-mono bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30 animate-pulse';
+                speechTranscript.innerText = "Silakan bicara sekarang...";
+                btnMic.className = "w-14 h-14 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-lg shadow-rose-500/20 transition-all duration-300 relative";
+                micIcon.className = "fa-solid fa-microphone-slash text-xl";
+                micPulse.classList.remove('hidden');
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase().trim();
+                speechTranscript.innerText = `"${transcript}"`;
+                logToTerminal(`[Suara] Terdeteksi: "${transcript}"`, 'sys');
+                processVoiceCommand(transcript);
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech Recognition Error:", event.error);
+                logToTerminal(`[Suara Error] ${event.error}`, 'error');
+                speechTranscript.innerText = `Error: ${event.error}`;
+                stopListeningUI();
+            };
+
+            recognition.onend = () => {
+                stopListeningUI();
+            };
+        }
+
+        function toggleVoiceRecognition() {
+            if (!recognition) return;
+
+            if (isListening) {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        }
+
+        function stopListeningUI() {
+            isListening = false;
+            speechStatusBadge.innerText = 'Siap';
+            speechStatusBadge.className = 'text-[10px] font-mono bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700';
+            btnMic.className = "w-14 h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 transition-all duration-300 relative";
+            micIcon.className = "fa-solid fa-microphone text-xl";
+            micPulse.classList.add('hidden');
+        }
+
+        // Voice Command Parsing & Action Handler
+        function processVoiceCommand(cmd) {
+            // Lampu 1
+            if (cmd.includes('nyalakan lampu satu') || cmd.includes('hidupkan lampu satu') || cmd.includes('lampu satu on')) {
+                setSwitchState('sw1', true, 'A');
+            } else if (cmd.includes('matikan lampu satu') || cmd.includes('lampu satu off')) {
+                setSwitchState('sw1', false, 'a');
+            }
+            // Lampu 2
+            else if (cmd.includes('nyalakan lampu dua') || cmd.includes('hidupkan lampu dua') || cmd.includes('lampu dua on')) {
+                setSwitchState('sw2', true, 'B');
+            } else if (cmd.includes('matikan lampu dua') || cmd.includes('lampu dua off')) {
+                setSwitchState('sw2', false, 'b');
+            }
+            // Kipas / Relay 3
+            else if (cmd.includes('nyalakan kipas') || cmd.includes('hidupkan kipas') || cmd.includes('kipas on')) {
+                setSwitchState('sw3', true, 'C');
+            } else if (cmd.includes('matikan kipas') || cmd.includes('kipas off')) {
+                setSwitchState('sw3', false, 'c');
+            }
+            // Stopkontak / Relay 4
+            else if (cmd.includes('nyalakan stopkontak') || cmd.includes('hidupkan stopkontak') || cmd.includes('stopkontak on')) {
+                setSwitchState('sw4', true, 'D');
+            } else if (cmd.includes('matikan stopkontak') || cmd.includes('stopkontak off')) {
+                setSwitchState('sw4', false, 'd');
+            }
+            // Perintah Semua
+            else if (cmd.includes('nyalakan semua') || cmd.includes('hidupkan semua')) {
+                setSwitchState('sw1', true, null);
+                setSwitchState('sw2', true, null);
+                setSwitchState('sw3', true, null);
+                setSwitchState('sw4', true, null);
+                sendData('ALL_ON');
+            } else if (cmd.includes('matikan semua')) {
+                setSwitchState('sw1', false, null);
+                setSwitchState('sw2', false, null);
+                setSwitchState('sw3', false, null);
+                setSwitchState('sw4', false, null);
+                sendData('ALL_OFF');
+            } else {
+                logToTerminal(`[Suara] Perintah "${cmd}" tidak dikenal.`, 'error');
+            }
+        }
+
+        // Helper to programmatically toggle switch UI & Send Bluetooth Command
+        function setSwitchState(id, state, command) {
+            switchStates[id] = state;
+            const btn = document.getElementById(id);
+            const dot = btn.querySelector('.dot');
+
+            if (state) {
+                btn.classList.remove('bg-slate-700');
+                btn.classList.add('bg-blue-600');
+                dot.classList.add('translate-x-5');
+            } else {
+                btn.classList.remove('bg-blue-600');
+                btn.classList.add('bg-slate-700');
+                dot.classList.remove('translate-x-5');
+            }
+
+            if (command) {
+                sendData(command);
+            }
+        }
+
+        // Bluetooth Connect / Disconnect Action
+        btnConnect.addEventListener('click', async () => {
+            if (isConnected) {
+                disconnectBluetooth();
+            } else {
+                connectBluetooth();
+            }
+        });
+
+        async function connectBluetooth() {
+            try {
+                logToTerminal('Memulai pencarian modul Bluetooth...', 'sys');
+                
+                // Prompt user to select Bluetooth device
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    // Accepts standard HM-10/HC-08 BLE UUIDs or generic serial services
+                    acceptAllDevices: true,
+                    optionalServices: ['00001101-0000-1000-8000-00005f9b34fb', '0000ffe0-0000-1000-8000-00005f9b34fb']
+                });
+
+                logToTerminal(`Menghubungkan ke ${bluetoothDevice.name || 'Perangkat Unknown'}...`, 'sys');
+                bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+                // Connect to GATT Server
+                gattServer = await bluetoothDevice.gatt.connect();
+
+                // Find Service & Characteristic (Common BLE Serial Characteristic)
+                try {
+                    const service = await gattServer.getPrimaryService('0000ffe0-0000-1000-8000-00005f9b34fb');
+                    txCharacteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00005f9b34fb');
+                } catch (e) {
+                    logToTerminal('Menggunakan fallback mode komunikasi...', 'sys');
+                }
+
+                updateUIConnected(bluetoothDevice.name || 'Arduino BT');
+                logToTerminal('Terhubung ke Bluetooth!', 'success');
+
+            } catch (error) {
+                console.error(error);
+                logToTerminal(`Gagal terhubung: ${error.message}`, 'error');
+                
+                // Fallback simulation mode for testing UI without physical Bluetooth
+                if (confirm('Gagal menghubungkan ke perangkat nyata. Apakah Anda ingin mengaktifkan "Mode Simulasi" untuk mencoba UI?')) {
+                    enableSimulationMode();
+                }
+            }
+        }
+
+        function enableSimulationMode() {
+            isConnected = true;
+            updateUIConnected('Simulasi Arduino');
+            logToTerminal('[MODE SIMULASI] Berhasil diaktifkan.', 'sys');
+        }
+
+        function disconnectBluetooth() {
+            if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                bluetoothDevice.gatt.disconnect();
+            } else {
+                onDisconnected();
+            }
+        }
+
+        function onDisconnected() {
+            isConnected = false;
+            txCharacteristic = null;
+            
+            statusText.innerText = 'Terputus';
+            statusText.className = 'text-xs text-red-400 font-medium';
+            statusIconBg.className = 'w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center';
+            btnConnectText.innerText = 'Hubungkan';
+            btnConnect.className = 'bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-lg transition flex items-center gap-2';
+
+            logToTerminal('Koneksi terputus.', 'error');
+        }
+
+        function updateUIConnected(deviceName) {
+            isConnected = true;
+            statusText.innerText = deviceName;
+            statusText.className = 'text-xs text-emerald-400 font-medium';
+            statusIconBg.className = 'w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center';
+            btnConnectText.innerText = 'Putuskan';
+            btnConnect.className = 'bg-rose-600 hover:bg-rose-500 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-lg transition flex items-center gap-2';
+        }
+
+        async function sendData(data) {
+            const commandWithNewline = data + '\n';
+            logToTerminal(`> Kirim: ${data}`, 'out');
+
+            if (!isConnected) {
+                logToTerminal('Peringatan: Bluetooth belum terhubung!', 'error');
+                return;
+            }
+
+            if (txCharacteristic) {
+                try {
+                    const encoder = new TextEncoder();
+                    await txCharacteristic.writeValue(encoder.encode(commandWithNewline));
+                } catch (err) {
+                    logToTerminal(`Gagal mengirim: ${err.message}`, 'error');
+                }
+            }
+        }
+
+        // Toggle Switch Logic
+        function toggleSwitch(id, onCmd, offCmd) {
+            switchStates[id] = !switchStates[id];
+            const btn = document.getElementById(id);
+            const dot = btn.querySelector('.dot');
+
+            if (switchStates[id]) {
+                btn.classList.remove('bg-slate-700');
+                btn.classList.add('bg-blue-600');
+                dot.classList.add('translate-x-5');
+                sendData(onCmd);
+            } else {
+                btn.classList.remove('bg-blue-600');
+                btn.classList.add('bg-slate-700');
+                dot.classList.remove('translate-x-5');
+                sendData(offCmd);
+            }
+        }
+
+        // Handle Slider Change
+        let sliderTimeout = null;
+        function handleSliderChange(val) {
+            document.getElementById('slider-val').innerText = val;
+            
+            // Throttle slider data transmission to prevent Bluetooth congestion
+            clearTimeout(sliderTimeout);
+            sliderTimeout = setTimeout(() => {
+                sendData(`S:${val}`);
+            }, 50);
+        }
+
+        // Manual Serial Send Form
+        function handleManualSend(e) {
+            e.preventDefault();
+            const input = document.getElementById('manual-cmd');
+            if (input.value.trim() !== '') {
+                sendData(input.value.trim());
+                input.value = '';
+            }
+        }
+
+        function logToTerminal(message, type = 'in') {
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            
+            if (type === 'out') {
+                div.className = 'text-blue-400 font-semibold';
+            } else if (type === 'sys') {
+                div.className = 'text-amber-300 italic';
+            } else if (type === 'error') {
+                div.className = 'text-rose-400';
+            } else if (type === 'success') {
+                div.className = 'text-emerald-300 font-bold';
+            } else {
+                div.className = 'text-emerald-400';
+            }
+
+            div.innerText = `[${time}] ${message}`;
+            terminalLog.appendChild(div);
+            terminalLog.scrollTop = terminalLog.scrollHeight;
+        }
+
+        function clearTerminal() {
+            terminalLog.innerHTML = '<div class="text-slate-500 italic">[Terminal Dibersihkan]</div>';
+        }
+
+        // Tab Switching Handler
+        function switchTab(tabName) {
+            const tabs = ['controls', 'terminal', 'code'];
+            tabs.forEach(tab => {
+                const tabElement = document.getElementById(`tab-${tab}`);
+                const navBtn = document.getElementById(`nav-${tab}`);
+                
+                if (tab === tabName) {
+                    tabElement.classList.remove('hidden');
+                    navBtn.className = 'flex flex-col items-center gap-1 p-2 text-blue-400 w-1/3 transition';
+                } else {
+                    tabElement.classList.add('hidden');
+                    navBtn.className = 'flex flex-col items-center gap-1 p-2 text-slate-400 hover:text-slate-200 w-1/3 transition';
+                }
+            });
+        }
+
+        // Copy Code Helper
+        function copyArduinoCode() {
+            const codeText = document.getElementById('code-block').innerText;
+            navigator.clipboard.writeText(codeText).then(() => {
+                alert('Kode Arduino berhasil disalin ke clipboard!');
+            }).catch(() => {
+                document.execCommand('copy');
+                alert('Kode Arduino berhasil disalin!');
+            });
+        }
+    </script>
+</body>
+</html>
